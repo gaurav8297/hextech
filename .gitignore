@@ -21,3 +21,4 @@ htmlcov/
 # IntelliJ IDEA / PyCharm
 .idea/
 *.iml
+traces
