@@ -50,6 +50,21 @@ def generate_responses(llm, sampling_params, prompts, skip_profile=False):
     if not skip_profile:
         llm.start_profile()
     outputs = llm.generate(prompts, sampling_params)
+    ttft = 0.0
+    schedule_delay = 0.0
+    avg_tpot = 0.0
+    for output in outputs:
+        time_to_first_token = output.metrics.first_token_time - output.metrics.arrival_time
+        schedule_delay += output.metrics.scheduler_time
+        ttft += time_to_first_token
+        total_tokens = 0
+        for completion_output in output.outputs:
+            total_tokens += len(completion_output.token_ids)
+        avg_tpot += (output.metrics.finished_time - output.metrics.first_token_time) / total_tokens
+    print(outputs[:3])
+    print(f"Average time to first token: {ttft / len(outputs):.4f} seconds")
+    print(f"Average time per output token: {avg_tpot / len(outputs):.4f} seconds")
+    print(f"Average schedule delay: {schedule_delay / len(outputs):.4f} seconds")
     if not skip_profile:
         print(f"Generating profile")
         llm.stop_profile()
@@ -74,4 +89,3 @@ if __name__ == "__main__":
     prompts = get_share_gpt_prompts(num_prompts=args.num_prompts, max_prompt_len=MAX_PROMPT_LEN)
     print_prompt_len_distribution(prompts)
     responses = generate_responses(llm, sampling_params, prompts, skip_profile=args.skip_profile)
-    print(responses[:5])
