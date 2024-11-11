@@ -1,4 +1,5 @@
 import os
+import argparse
 
 import matplotlib.pyplot as plt
 
@@ -9,8 +10,6 @@ from vllm import LLM, SamplingParams
 os.environ["VLLM_TORCH_PROFILER_DIR"] = "./vllm_profile"
 LLM_MODEL = "TinyLlama/TinyLlama_v1.1"
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
-llm = LLM(model=LLM_MODEL, tensor_parallel_size=1, enable_chunked_prefill=False, max_num_seqs=256, scheduling_policy="priority")
-
 # prompt settings
 MAX_PROMPT_LEN = 2048
 NUM_PROMPTS = 500
@@ -51,11 +50,24 @@ def print_prompt_len_distribution(prompts):
 def generate_responses(llm, sampling_params, prompts):
     llm.start_profile()
     outputs = llm.generate(prompts, sampling_params)
+    print(f"Generating profile")
     llm.stop_profile()
     return outputs
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--tensor_parallel_size", type=int, default=1)
+    parser.add_argument("--max_num_seqs", type=int, default=256)
+    parser.add_argument("--enable_chunked_prefill", action="store_true")
+    args = parser.parse_args()
+    llm = LLM(
+        model=LLM_MODEL, 
+        tensor_parallel_size=args.tensor_parallel_size, 
+        enable_chunked_prefill=args.enable_chunked_prefill, 
+        max_num_seqs=args.max_num_seqs, 
+        scheduling_policy="priority"
+    )
     prompts = get_share_gpt_prompts(num_prompts=NUM_PROMPTS, max_prompt_len=MAX_PROMPT_LEN)
     print_prompt_len_distribution(prompts)
     responses = generate_responses(llm, sampling_params, prompts)
