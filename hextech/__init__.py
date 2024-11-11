@@ -12,7 +12,6 @@ LLM_MODEL = "TinyLlama/TinyLlama_v1.1"
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 # prompt settings
 MAX_PROMPT_LEN = 2048
-NUM_PROMPTS = 500
 
 
 def get_share_gpt_prompts(num_prompts=10000, max_prompt_len=8192):
@@ -47,11 +46,13 @@ def print_prompt_len_distribution(prompts):
     plt.show()
 
 
-def generate_responses(llm, sampling_params, prompts):
-    llm.start_profile()
+def generate_responses(llm, sampling_params, prompts, skip_profile=False):
+    if not skip_profile:
+        llm.start_profile()
     outputs = llm.generate(prompts, sampling_params)
-    print(f"Generating profile")
-    llm.stop_profile()
+    if not skip_profile:
+        print(f"Generating profile")
+        llm.stop_profile()
     return outputs
 
 
@@ -59,7 +60,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--tensor_parallel_size", type=int, default=1)
     parser.add_argument("--max_num_seqs", type=int, default=256)
+    parser.add_argument("--num_prompts", type=int, default=500)
     parser.add_argument("--enable_chunked_prefill", action="store_true")
+    parser.add_argument("--skip_profile", action="store_true")
     args = parser.parse_args()
     llm = LLM(
         model=LLM_MODEL, 
@@ -68,7 +71,7 @@ if __name__ == "__main__":
         max_num_seqs=args.max_num_seqs, 
         scheduling_policy="priority"
     )
-    prompts = get_share_gpt_prompts(num_prompts=NUM_PROMPTS, max_prompt_len=MAX_PROMPT_LEN)
+    prompts = get_share_gpt_prompts(num_prompts=args.num_prompts, max_prompt_len=MAX_PROMPT_LEN)
     print_prompt_len_distribution(prompts)
-    responses = generate_responses(llm, sampling_params, prompts)
+    responses = generate_responses(llm, sampling_params, prompts, skip_profile=args.skip_profile)
     print(responses[:5])
