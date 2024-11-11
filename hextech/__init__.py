@@ -12,8 +12,8 @@ sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 llm = LLM(model=LLM_MODEL, tensor_parallel_size=2)
 
 # prompt settings
-MAX_PROMPT_LEN = 8192
-NUM_PROMPTS = 10000
+MAX_PROMPT_LEN = 2048
+NUM_PROMPTS = 10
 
 
 def get_share_gpt_prompts(num_prompts=10000, max_prompt_len=8192):
@@ -48,7 +48,7 @@ def print_prompt_len_distribution(prompts):
     plt.show()
 
 
-def generate_responses(llm, prompts):
+def generate_responses(llm, sampling_params, prompts):
     llm.start_profile()
     outputs = llm.generate(prompts, sampling_params)
     llm.stop_profile()
@@ -58,5 +58,5 @@ def generate_responses(llm, prompts):
 if __name__ == "__main__":
     prompts = get_share_gpt_prompts(num_prompts=NUM_PROMPTS, max_prompt_len=MAX_PROMPT_LEN)
     print_prompt_len_distribution(prompts)
-    responses = generate_responses(llm, prompts)
+    responses = generate_responses(llm, sampling_params, prompts)
     print(responses[:5])
