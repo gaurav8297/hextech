@@ -13,7 +13,7 @@ llm = LLM(model=LLM_MODEL, tensor_parallel_size=2)
 
 # prompt settings
 MAX_PROMPT_LEN = 2048
-NUM_PROMPTS = 10
+NUM_PROMPTS = 100
 
 
 def get_share_gpt_prompts(num_prompts=10000, max_prompt_len=8192):
