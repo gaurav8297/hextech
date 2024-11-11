@@ -9,7 +9,7 @@ from vllm import LLM, SamplingParams
 os.environ["VLLM_TORCH_PROFILER_DIR"] = "./vllm_profile"
 LLM_MODEL = "TinyLlama/TinyLlama_v1.1"
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
-llm = LLM(model=LLM_MODEL, tensor_parallel_size=1, enable_chunked_prefill=False, max_num_seqs=512)
+llm = LLM(model=LLM_MODEL, tensor_parallel_size=1, enable_chunked_prefill=False, max_num_seqs=256, scheduling_policy="priority")
 
 # prompt settings
 MAX_PROMPT_LEN = 2048
