@@ -9,11 +9,11 @@ from vllm import LLM, SamplingParams
 os.environ["VLLM_TORCH_PROFILER_DIR"] = "./vllm_profile"
 LLM_MODEL = "TinyLlama/TinyLlama_v1.1"
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
-llm = LLM(model=LLM_MODEL, tensor_parallel_size=1)
+llm = LLM(model=LLM_MODEL, tensor_parallel_size=1, enable_chunked_prefill=False, max_num_seqs=512)
 
 # prompt settings
 MAX_PROMPT_LEN = 2048
-NUM_PROMPTS = 100
+NUM_PROMPTS = 500
 
 
 def get_share_gpt_prompts(num_prompts=10000, max_prompt_len=8192):
