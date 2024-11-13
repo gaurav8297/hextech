@@ -1,6 +1,7 @@
 vllm_profile/
 bench/profile
 bench/__pycache__
+utils/__pycache__
 
 # Byte-compiled / optimized files
 __pycache__/
