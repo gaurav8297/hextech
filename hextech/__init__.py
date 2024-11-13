@@ -77,14 +77,17 @@ if __name__ == "__main__":
     parser.add_argument("--max_num_seqs", type=int, default=256)
     parser.add_argument("--num_prompts", type=int, default=500)
     parser.add_argument("--enable_chunked_prefill", action="store_true")
+    parser.add_argument("--num_scheduler_steps", type=int, default=1)
+    parser.add_argument("--multi_step_stream_outputs", default="store_true")
     parser.add_argument("--skip_profile", action="store_true")
     args = parser.parse_args()
     llm = LLM(
         model=LLM_MODEL, 
         tensor_parallel_size=args.tensor_parallel_size, 
         enable_chunked_prefill=args.enable_chunked_prefill, 
-        max_num_seqs=args.max_num_seqs, 
-        scheduling_policy="priority"
+        max_num_seqs=args.max_num_seqs,
+        num_scheduler_steps=args.num_scheduler_steps,
+        multi_step_stream_outputs=args.multi_step_stream_outputs
     )
     prompts = get_share_gpt_prompts(num_prompts=args.num_prompts, max_prompt_len=MAX_PROMPT_LEN)
     print_prompt_len_distribution(prompts)
