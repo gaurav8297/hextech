@@ -2,6 +2,7 @@ vllm_profile/
 bench/profile
 bench/__pycache__
 utils/__pycache__
+hextech/*.code-workspace
 
 # Byte-compiled / optimized files
 __pycache__/

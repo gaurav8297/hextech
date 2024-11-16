@@ -11,7 +11,6 @@ from vllm import LLM, AsyncLLMEngine, SamplingParams, AsyncEngineArgs
 
 # vllm settings
 os.environ["VLLM_TORCH_PROFILER_DIR"] = "./vllm_profile"
-LLM_MODEL = "meta-llama/Llama-3.1-8B"
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 # prompt settings
 MAX_PROMPT_LEN = 2048
@@ -51,7 +50,7 @@ def print_prompt_len_distribution(prompts):
 
 def generate_responses(args, sampling_params, prompts, skip_profile=False):
     llm = LLM(
-        model=LLM_MODEL,
+        model=args.model_name,
         tensor_parallel_size=args.tensor_parallel_size,
         enable_chunked_prefill=args.enable_chunked_prefill,
         max_num_seqs=args.max_num_seqs,
@@ -90,9 +89,8 @@ def generate_responses(args, sampling_params, prompts, skip_profile=False):
     print(f"Average schedule delay: {avg_schedule_delay:.4f} seconds")
     print(f"End-to-end time: {e2e_time:.4f} seconds")
     print("=============================")
-    print(f"Requests,MaxSeqs,BlockSize,TTFT,TTPOT,Schedule_Delay,E2E_Time")
-    print(
-        f"{len(prompts)},{args.max_num_seqs},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
+    print(f"Requests,MaxSeqs,SchedulerSteps,BlockSize,TTFT,TTPOT,Schedule_Delay,E2E_Time")
+    print(f"{len(prompts)},{args.max_num_seqs},{args.num_scheduler_steps},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
     print("=============================")
 
     if not skip_profile:
@@ -105,7 +103,7 @@ def generate_responses(args, sampling_params, prompts, skip_profile=False):
 async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=False):
     """Generate responses using asynchronous LLM."""
     engine_args = AsyncEngineArgs(
-        model=LLM_MODEL,
+        model=args.model_name,
         tensor_parallel_size=args.tensor_parallel_size,
         enable_chunked_prefill=args.enable_chunked_prefill,
         max_num_seqs=args.max_num_seqs,
@@ -143,6 +141,7 @@ async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=Fals
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model_name", type=str, default="meta-llama/Llama-3.1-8B", help="meta-llama/Llama-3.1-8B, TinyLlama/TinyLlama_v1.1")
     parser.add_argument("--tensor_parallel_size", type=int, default=1)
     parser.add_argument("--max_num_seqs", type=int, default=256)
     parser.add_argument("--num_prompts", type=int, default=500)
