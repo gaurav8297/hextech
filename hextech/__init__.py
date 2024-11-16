@@ -111,7 +111,8 @@ async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=Fals
         multi_step_stream_outputs=args.multi_step_stream_outputs,
         block_size=args.block_size,
         pipeline_parallel_size=args.pipeline_parallel_size,
-        distributed_executor_backend=args.distributed_executor_backend
+        distributed_executor_backend=args.distributed_executor_backend,
+        dtype=torch.float16
     )
     engine = AsyncLLMEngine.from_engine_args(engine_args)
     requests = [{"prompt": prompt, "stream": False, "request_id": i + 1} for i, prompt in enumerate(prompts)]
