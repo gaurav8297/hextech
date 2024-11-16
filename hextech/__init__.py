@@ -2,6 +2,7 @@ import os
 import argparse
 import torch
 import time
+import asyncio
 
 import matplotlib.pyplot as plt
 
@@ -101,7 +102,7 @@ def generate_responses(args, sampling_params, prompts, skip_profile=False):
     return outputs
 
 
-def get_async_llm_engine(args, sampling_params, prompts, skip_profile=False):
+async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=False):
     engine_args = AsyncEngineArgs(
         model=LLM_MODEL,
         tensor_parallel_size=args.tensor_parallel_size,
@@ -120,7 +121,7 @@ def get_async_llm_engine(args, sampling_params, prompts, skip_profile=False):
         requests.append({"prompt": prompt, "stream": False, "request_id": request_count})
 
     if not skip_profile:
-        engine.start_profile()
+        await engine.start_profile()
 
     result_generators = []
     for request in requests:
@@ -132,7 +133,7 @@ def get_async_llm_engine(args, sampling_params, prompts, skip_profile=False):
             final_outputs.append(output)
 
     if not skip_profile:
-        engine.stop_profile()
+        await engine.stop_profile()
 
     return final_outputs
 
@@ -157,6 +158,6 @@ if __name__ == "__main__":
     prompts = get_share_gpt_prompts(num_prompts=args.num_prompts, max_prompt_len=MAX_PROMPT_LEN)
     print_prompt_len_distribution(prompts)
     if run_async:
-        responses = get_async_llm_engine(args, sampling_params, prompts, skip_profile=args.skip_profile)
+        responses = asyncio.run(get_async_llm_engine(args, sampling_params, prompts, skip_profile=args.skip_profile))
     else:
         responses = generate_responses(args, sampling_params, prompts, skip_profile=args.skip_profile)
