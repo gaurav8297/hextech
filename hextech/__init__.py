@@ -126,8 +126,13 @@ async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=Fals
             results.append(output)
         return results
 
+    start_time = time.time()
     # Gather all results asynchronously
     final_outputs = await asyncio.gather(*(process_request(req) for req in requests))
+    end_time = time.time()
+    time_taken = end_time - start_time
+    # print throughput
+    print(f"Throughput: {len(prompts) / time_taken:.2f} requests/second")
 
     if not skip_profile:
         await engine.stop_profile()
