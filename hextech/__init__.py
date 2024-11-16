@@ -1,5 +1,7 @@
 import os
 import argparse
+import torch
+import time
 
 import matplotlib.pyplot as plt
 
@@ -46,13 +48,19 @@ def print_prompt_len_distribution(prompts):
     plt.show()
 
 
-def generate_responses(llm, sampling_params, prompts, skip_profile=False):
+def generate_responses(args, llm, sampling_params, prompts, skip_profile=False):
     if not skip_profile:
         llm.start_profile()
+
+    start_time = time.time()
     outputs = llm.generate(prompts, sampling_params)
+    end_time = time.time()
+    torch.cuda.synchronize()
+
+    e2e_time = end_time - start_time
     ttft = 0.0
     schedule_delay = 0.0
-    avg_tpot = 0.0
+    tpot = 0.0
     for output in outputs:
         time_to_first_token = output.metrics.first_token_time - output.metrics.arrival_time
         schedule_delay += output.metrics.scheduler_time
@@ -60,14 +68,24 @@ def generate_responses(llm, sampling_params, prompts, skip_profile=False):
         total_tokens = 0
         for completion_output in output.outputs:
             total_tokens += len(completion_output.token_ids)
-        avg_tpot += (output.metrics.finished_time - output.metrics.first_token_time) / total_tokens
+        tpot += (output.metrics.finished_time - output.metrics.first_token_time) / total_tokens
     print(outputs[:3])
-    print(f"Average time to first token: {ttft / len(outputs):.4f} seconds")
-    print(f"Average time per output token: {avg_tpot / len(outputs):.4f} seconds")
-    print(f"Average schedule delay: {schedule_delay / len(outputs):.4f} seconds")
+    avg_ttft = ttft / len(outputs)
+    avg_tpot = tpot / len(outputs)
+    avg_schedule_delay = schedule_delay / len(outputs)
+    print(f"Average time to first token: {avg_ttft:.4f} seconds")
+    print(f"Average time per output token: {avg_tpot:.4f} seconds")
+    print(f"Average schedule delay: {avg_schedule_delay:.4f} seconds")
+    print(f"End-to-end time: {e2e_time:.4f} seconds")
+    print("=============================")
+    print(f"Requests,MaxSeqs,BlockSize,TTFT,TTPOT,Schedule_Delay,E2E_Time")
+    print(f"{len(prompts)},{args.max_num_seqs},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
+    print("=============================")
+
     if not skip_profile:
         print(f"Generating profile")
         llm.stop_profile()
+
     return outputs
 
 
@@ -83,6 +101,7 @@ if __name__ == "__main__":
     parser.add_argument("--block_size", type=int, default=16)
     parser.add_argument("--pipeline_parallel_size", type=int, default=1)
     args = parser.parse_args()
+    print(f" *** Args: {args}")
     llm = LLM(
         model=LLM_MODEL, 
         tensor_parallel_size=args.tensor_parallel_size, 
@@ -95,4 +114,4 @@ if __name__ == "__main__":
     )
     prompts = get_share_gpt_prompts(num_prompts=args.num_prompts, max_prompt_len=MAX_PROMPT_LEN)
     print_prompt_len_distribution(prompts)
-    responses = generate_responses(llm, sampling_params, prompts, skip_profile=args.skip_profile)
+    responses = generate_responses(args, llm, sampling_params, prompts, skip_profile=args.skip_profile)
