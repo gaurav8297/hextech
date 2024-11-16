@@ -5,15 +5,15 @@ import time
 import asyncio
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from datasets import load_dataset
 from vllm import LLM, AsyncLLMEngine, SamplingParams, AsyncEngineArgs
 
 # vllm settings
 os.environ["VLLM_TORCH_PROFILER_DIR"] = "./vllm_profile"
-sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 # prompt settings
-MAX_PROMPT_LEN = 2048
+MAX_PROMPT_LEN = 512
 
 
 def get_share_gpt_prompts(num_prompts=10000, max_prompt_len=8192):
@@ -48,7 +48,7 @@ def print_prompt_len_distribution(prompts):
     plt.show()
 
 
-def generate_responses(args, sampling_params, prompts, skip_profile=False):
+def generate_responses(args, sampling_params, prompts, profile=False):
     llm = LLM(
         model=args.model_name,
         tensor_parallel_size=args.tensor_parallel_size,
@@ -60,7 +60,7 @@ def generate_responses(args, sampling_params, prompts, skip_profile=False):
         pipeline_parallel_size=args.pipeline_parallel_size
     )
 
-    if not skip_profile:
+    if profile:
         llm.start_profile()
 
     start_time = time.time()
@@ -72,35 +72,49 @@ def generate_responses(args, sampling_params, prompts, skip_profile=False):
     ttft = 0.0
     schedule_delay = 0.0
     tpot = 0.0
+    responses = 0
+    input_lens = []
+    output_lens = []
     for output in outputs:
         time_to_first_token = output.metrics.first_token_time - output.metrics.arrival_time
         schedule_delay += output.metrics.scheduler_time
         ttft += time_to_first_token
         total_tokens = 0
+        input_lens.append(len(output.prompt_token_ids))
         for completion_output in output.outputs:
             total_tokens += len(completion_output.token_ids)
+            print(f"*** Prompt {responses}: {output.prompt}")
+            print(f"- Reponse {responses}: {completion_output.text}")
+            print(f"- Prompt Tokens: {len(output.prompt_token_ids)}, Response Tokens: {len(completion_output.token_ids)}")
+            # compute mean median min max of input and outputs lens
+            output_lens.append(len(completion_output.token_ids))
+            responses += 1
         tpot += (output.metrics.finished_time - output.metrics.first_token_time) / total_tokens
-    print(outputs[:3])
+    input_lens = np.array(input_lens)
+    output_lens = np.array(output_lens)
+    
     avg_ttft = ttft / len(outputs)
     avg_tpot = tpot / len(outputs)
     avg_schedule_delay = schedule_delay / len(outputs)
+    print(f"Input length stats: mean={np.mean(input_lens):.2f}, median={np.median(input_lens):.2f}, min={np.min(input_lens)}, max={np.max(input_lens)}")
+    print(f"Output length stats: mean={np.mean(output_lens):.2f}, median={np.median(output_lens):.2f}, min={np.min(output_lens)}, max={np.max(output_lens)}")
     print(f"Average time to first token: {avg_ttft:.4f} seconds")
     print(f"Average time per output token: {avg_tpot:.4f} seconds")
     print(f"Average schedule delay: {avg_schedule_delay:.4f} seconds")
     print(f"End-to-end time: {e2e_time:.4f} seconds")
     print("=============================")
-    print(f"Requests,MaxSeqs,SchedulerSteps,BlockSize,TTFT,TTPOT,Schedule_Delay,E2E_Time")
-    print(f"{len(prompts)},{args.max_num_seqs},{args.num_scheduler_steps},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
+    print(f"Requests,MaxSeqs,SchedulerSteps,MaxTokens,BlockSize,TTFT,TTPOT,Schedule_Delay,E2E_Time")
+    print(f"{len(prompts)},{args.max_num_seqs},{args.num_scheduler_steps},{args.max_tokens},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
     print("=============================")
 
-    if not skip_profile:
+    if profile:
         print(f"Generating profile")
         llm.stop_profile()
 
     return outputs
 
 
-async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=False):
+async def get_async_llm_engine(args, sampling_params, prompts, profile=False):
     """Generate responses using asynchronous LLM."""
     engine_args = AsyncEngineArgs(
         model=args.model_name,
@@ -116,7 +130,7 @@ async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=Fals
     engine = AsyncLLMEngine.from_engine_args(engine_args)
     requests = [{"prompt": prompt, "stream": False, "request_id": i + 1} for i, prompt in enumerate(prompts)]
 
-    if not skip_profile:
+    if profile:
         await engine.start_profile()
 
     async def process_request(request):
@@ -133,7 +147,7 @@ async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=Fals
     # print throughput
     print(f"Throughput: {len(prompts) / time_taken:.4f} requests/second")
 
-    if not skip_profile:
+    if profile:
         await engine.stop_profile()
 
     return final_outputs
@@ -144,12 +158,13 @@ if __name__ == "__main__":
     parser.add_argument("--model_name", type=str, default="meta-llama/Llama-3.1-8B", help="meta-llama/Llama-3.1-8B, TinyLlama/TinyLlama_v1.1")
     parser.add_argument("--tensor_parallel_size", type=int, default=1)
     parser.add_argument("--max_num_seqs", type=int, default=256)
-    parser.add_argument("--num_prompts", type=int, default=500)
+    parser.add_argument("--num_prompts", type=int, default=16)
+    parser.add_argument("--max_tokens", type=int, default=1024)
     parser.add_argument("--enable_chunked_prefill", action="store_true")
     parser.add_argument("--num_scheduler_steps", type=int, default=1)
     parser.add_argument("--multi_step_stream_outputs", action="store_true")
-    parser.add_argument("--skip_profile", action="store_true")
-    parser.add_argument("--block_size", type=int, default=16)
+    parser.add_argument("--profile", action="store_true")
+    parser.add_argument("--block_size", type=int, default=32)
     parser.add_argument("--pipeline_parallel_size", type=int, default=1)
     parser.add_argument("--max_prompt_len", type=int, default=MAX_PROMPT_LEN)
     parser.add_argument("--distributed_executor_backend", type=str, default=None)
@@ -160,8 +175,9 @@ if __name__ == "__main__":
         run_async = True
 
     prompts = get_share_gpt_prompts(num_prompts=args.num_prompts, max_prompt_len=args.max_prompt_len)
+    sampling_params = SamplingParams(temperature=0.8, top_p=0.95, max_tokens=args.max_tokens)
     print_prompt_len_distribution(prompts)
     if run_async:
-        responses = asyncio.run(get_async_llm_engine(args, sampling_params, prompts, skip_profile=args.skip_profile))
+        responses = asyncio.run(get_async_llm_engine(args, sampling_params, prompts, profile=args.profile))
     else:
-        responses = generate_responses(args, sampling_params, prompts, skip_profile=args.skip_profile)
+        responses = generate_responses(args, sampling_params, prompts, profile=args.profile)
