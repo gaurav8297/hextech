@@ -11,7 +11,7 @@ from vllm import LLM, AsyncLLMEngine, SamplingParams, AsyncEngineArgs
 
 # vllm settings
 os.environ["VLLM_TORCH_PROFILER_DIR"] = "./vllm_profile"
-LLM_MODEL = "TinyLlama/TinyLlama_v1.1"
+LLM_MODEL = "meta-llama/Llama-3.1-8B"
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 # prompt settings
 MAX_PROMPT_LEN = 2048
