@@ -132,7 +132,7 @@ async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=Fals
     end_time = time.time()
     time_taken = end_time - start_time
     # print throughput
-    print(f"Throughput: {len(prompts) / time_taken:.2f} requests/second")
+    print(f"Throughput: {len(prompts) / time_taken:.4f} requests/second")
 
     if not skip_profile:
         await engine.stop_profile()
@@ -151,13 +151,14 @@ if __name__ == "__main__":
     parser.add_argument("--skip_profile", action="store_true")
     parser.add_argument("--block_size", type=int, default=16)
     parser.add_argument("--pipeline_parallel_size", type=int, default=1)
+    parser.add_argument("--max_prompt_len", type=int, default=MAX_PROMPT_LEN)
     args = parser.parse_args()
     print(f" *** Args: {args}")
     run_async = False
     if args.pipeline_parallel_size > 1:
         run_async = True
 
-    prompts = get_share_gpt_prompts(num_prompts=args.num_prompts, max_prompt_len=MAX_PROMPT_LEN)
+    prompts = get_share_gpt_prompts(num_prompts=args.num_prompts, max_prompt_len=args.max_prompt_len)
     print_prompt_len_distribution(prompts)
     if run_async:
         responses = asyncio.run(get_async_llm_engine(args, sampling_params, prompts, skip_profile=args.skip_profile))
