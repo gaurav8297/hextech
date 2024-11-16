@@ -103,6 +103,7 @@ def generate_responses(args, sampling_params, prompts, skip_profile=False):
 
 
 async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=False):
+    """Generate responses using asynchronous LLM."""
     engine_args = AsyncEngineArgs(
         model=LLM_MODEL,
         tensor_parallel_size=args.tensor_parallel_size,
@@ -111,26 +112,22 @@ async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=Fals
         num_scheduler_steps=args.num_scheduler_steps,
         multi_step_stream_outputs=args.multi_step_stream_outputs,
         block_size=args.block_size,
-        pipeline_parallel_size=args.pipeline_parallel_size
+        pipeline_parallel_size=args.pipeline_parallel_size,
     )
     engine = AsyncLLMEngine.from_engine_args(engine_args)
-    request_count = 0
-    requests = []
-    for prompt in prompts:
-        request_count += 1
-        requests.append({"prompt": prompt, "stream": False, "request_id": request_count})
+    requests = [{"prompt": prompt, "stream": False, "request_id": i + 1} for i, prompt in enumerate(prompts)]
 
     if not skip_profile:
         await engine.start_profile()
 
-    result_generators = []
-    for request in requests:
-        result_generators.append(engine.generate(request["prompt"], sampling_params, str(request["request_id"])))
+    async def process_request(request):
+        results = []
+        async for output in engine.generate(request["prompt"], sampling_params, str(request["request_id"])):
+            results.append(output)
+        return results
 
-    final_outputs = []
-    for result_generator in result_generators:
-        async for output in result_generator:
-            final_outputs.append(output)
+    # Gather all results asynchronously
+    final_outputs = await asyncio.gather(*(process_request(req) for req in requests))
 
     if not skip_profile:
         await engine.stop_profile()
