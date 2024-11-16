@@ -6,7 +6,7 @@ import time
 import matplotlib.pyplot as plt
 
 from datasets import load_dataset
-from vllm import LLM, SamplingParams
+from vllm import LLM, AsyncLLMEngine, SamplingParams, AsyncEngineArgs
 
 # vllm settings
 os.environ["VLLM_TORCH_PROFILER_DIR"] = "./vllm_profile"
@@ -48,7 +48,18 @@ def print_prompt_len_distribution(prompts):
     plt.show()
 
 
-def generate_responses(args, llm, sampling_params, prompts, skip_profile=False):
+def generate_responses(args, sampling_params, prompts, skip_profile=False):
+    llm = LLM(
+        model=LLM_MODEL,
+        tensor_parallel_size=args.tensor_parallel_size,
+        enable_chunked_prefill=args.enable_chunked_prefill,
+        max_num_seqs=args.max_num_seqs,
+        num_scheduler_steps=args.num_scheduler_steps,
+        multi_step_stream_outputs=args.multi_step_stream_outputs,
+        block_size=args.block_size,
+        pipeline_parallel_size=args.pipeline_parallel_size
+    )
+
     if not skip_profile:
         llm.start_profile()
 
@@ -79,7 +90,8 @@ def generate_responses(args, llm, sampling_params, prompts, skip_profile=False):
     print(f"End-to-end time: {e2e_time:.4f} seconds")
     print("=============================")
     print(f"Requests,MaxSeqs,BlockSize,TTFT,TTPOT,Schedule_Delay,E2E_Time")
-    print(f"{len(prompts)},{args.max_num_seqs},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
+    print(
+        f"{len(prompts)},{args.max_num_seqs},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
     print("=============================")
 
     if not skip_profile:
@@ -87,6 +99,42 @@ def generate_responses(args, llm, sampling_params, prompts, skip_profile=False):
         llm.stop_profile()
 
     return outputs
+
+
+def get_async_llm_engine(args, sampling_params, prompts, skip_profile=False):
+    engine_args = AsyncEngineArgs(
+        model=LLM_MODEL,
+        tensor_parallel_size=args.tensor_parallel_size,
+        enable_chunked_prefill=args.enable_chunked_prefill,
+        max_num_seqs=args.max_num_seqs,
+        num_scheduler_steps=args.num_scheduler_steps,
+        multi_step_stream_outputs=args.multi_step_stream_outputs,
+        block_size=args.block_size,
+        pipeline_parallel_size=args.pipeline_parallel_size
+    )
+    engine = AsyncLLMEngine.from_engine_args(engine_args)
+    request_count = 0
+    requests = []
+    for prompt in prompts:
+        request_count += 1
+        requests.append({"prompt": prompt, "stream": False, "request_id": request_count})
+
+    if not skip_profile:
+        engine.start_profile()
+
+    result_generators = []
+    for request in requests:
+        result_generators.append(engine.generate(request["prompt"], sampling_params, request["sampling_params"]))
+
+    final_outputs = []
+    for result_generator in result_generators:
+        async for output in result_generator:
+            final_outputs.append(output)
+
+    if not skip_profile:
+        engine.stop_profile()
+
+    return final_outputs
 
 
 if __name__ == "__main__":
@@ -102,16 +150,13 @@ if __name__ == "__main__":
     parser.add_argument("--pipeline_parallel_size", type=int, default=1)
     args = parser.parse_args()
     print(f" *** Args: {args}")
-    llm = LLM(
-        model=LLM_MODEL, 
-        tensor_parallel_size=args.tensor_parallel_size, 
-        enable_chunked_prefill=args.enable_chunked_prefill, 
-        max_num_seqs=args.max_num_seqs,
-        num_scheduler_steps=args.num_scheduler_steps,
-        multi_step_stream_outputs=args.multi_step_stream_outputs,
-        block_size=args.block_size,
-        pipeline_parallel_size=args.pipeline_parallel_size
-    )
+    run_async = False
+    if args.pipeline_parallel_size > 1:
+        run_async = True
+
     prompts = get_share_gpt_prompts(num_prompts=args.num_prompts, max_prompt_len=MAX_PROMPT_LEN)
     print_prompt_len_distribution(prompts)
-    responses = generate_responses(args, llm, sampling_params, prompts, skip_profile=args.skip_profile)
+    if run_async:
+        responses = get_async_llm_engine(args, sampling_params, prompts, skip_profile=args.skip_profile)
+    else:
+        responses = generate_responses(args, sampling_params, prompts, skip_profile=args.skip_profile)
