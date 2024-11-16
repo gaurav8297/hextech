@@ -125,7 +125,7 @@ async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=Fals
 
     result_generators = []
     for request in requests:
-        result_generators.append(engine.generate(request["prompt"], sampling_params, request["sampling_params"]))
+        result_generators.append(engine.generate(request["prompt"], sampling_params, str(request["request_id"])))
 
     final_outputs = []
     for result_generator in result_generators:
