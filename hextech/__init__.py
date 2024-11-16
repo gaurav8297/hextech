@@ -113,6 +113,7 @@ async def get_async_llm_engine(args, sampling_params, prompts, skip_profile=Fals
         multi_step_stream_outputs=args.multi_step_stream_outputs,
         block_size=args.block_size,
         pipeline_parallel_size=args.pipeline_parallel_size,
+        distributed_executor_backend=args.distributed_executor_backend
     )
     engine = AsyncLLMEngine.from_engine_args(engine_args)
     requests = [{"prompt": prompt, "stream": False, "request_id": i + 1} for i, prompt in enumerate(prompts)]
@@ -152,6 +153,7 @@ if __name__ == "__main__":
     parser.add_argument("--block_size", type=int, default=16)
     parser.add_argument("--pipeline_parallel_size", type=int, default=1)
     parser.add_argument("--max_prompt_len", type=int, default=MAX_PROMPT_LEN)
+    parser.add_argument("--distributed_executor_backend", type=str, default=None)
     args = parser.parse_args()
     print(f" *** Args: {args}")
     run_async = False
