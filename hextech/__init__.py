@@ -140,7 +140,7 @@ async def get_async_llm_engine(args, sampling_params, prompts, profile=False):
 
     return final_outputs
 
-def print_metrics(outputs):
+def print_metrics(args, outputs):
     start_time = math.inf
     end_time = 0
     ttft = 0.0
@@ -157,10 +157,11 @@ def print_metrics(outputs):
         input_lens.append(len(output.prompt_token_ids))
         for completion_output in output.outputs:
             total_tokens += len(completion_output.token_ids)
-            print(f"*** Prompt {responses}: {output.prompt}")
-            print(f"- Reponse {responses}: {completion_output.text}")
-            print(
-                f"- Prompt Tokens: {len(output.prompt_token_ids)}, Response Tokens: {len(completion_output.token_ids)}")
+            if args.print_outputs:
+                print(f"*** Prompt {responses}: {output.prompt}")
+                print(f"- Reponse {responses}: {completion_output.text}")
+                print(
+                    f"- Prompt Tokens: {len(output.prompt_token_ids)}, Response Tokens: {len(completion_output.token_ids)}")
             # compute mean median min max of input and outputs lens
             output_lens.append(len(completion_output.token_ids))
             responses += 1
@@ -174,6 +175,7 @@ def print_metrics(outputs):
     avg_tpot = tpot / len(outputs)
     avg_schedule_delay = schedule_delay / len(outputs)
     e2e_time = end_time - start_time
+    throughput = len(prompts) / e2e_time
     print(
         f"Input length stats: mean={np.mean(input_lens):.2f}, median={np.median(input_lens):.2f}, min={np.min(input_lens)}, max={np.max(input_lens)}")
     print(
@@ -182,6 +184,7 @@ def print_metrics(outputs):
     print(f"Average time per output token: {avg_tpot:.4f} seconds")
     print(f"Average schedule delay: {avg_schedule_delay:.4f} seconds")
     print(f"End-to-end time: {e2e_time:.4f} seconds")
+    print(f"Throughput: {throughput:.4f} requests/second")
     print("=============================")
     print(f"Requests,MaxSeqs,SchedulerSteps,MaxTokens,BlockSize,TTFT,TTPOT,Schedule_Delay,E2E_Time")
     print(
@@ -224,6 +227,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_prompt_len", type=int, default=MAX_PROMPT_LEN)
     parser.add_argument("--distributed_executor_backend", type=str, default=None)
     parser.add_argument("--pp_partition_ratio", type=str, default=None)
+    parser.add_argument("--print_outputs", action="store_true")
     args = parser.parse_args()
     print(f" *** Args: {args}")
 
@@ -248,4 +252,4 @@ if __name__ == "__main__":
         p.join()
     
     all_responses = [output for _, proc_output in outputs for output in proc_output]
-    print_metrics(all_responses)
+    print_metrics(args, all_responses)
