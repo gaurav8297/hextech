@@ -7,6 +7,7 @@ import asyncio
 import matplotlib.pyplot as plt
 import numpy as np
 
+from typing import Optional
 from datasets import load_dataset
 from vllm import LLM, AsyncLLMEngine, SamplingParams, AsyncEngineArgs
 
@@ -85,26 +86,30 @@ def generate_responses(args, sampling_params, prompts, profile=False):
             total_tokens += len(completion_output.token_ids)
             print(f"*** Prompt {responses}: {output.prompt}")
             print(f"- Reponse {responses}: {completion_output.text}")
-            print(f"- Prompt Tokens: {len(output.prompt_token_ids)}, Response Tokens: {len(completion_output.token_ids)}")
+            print(
+                f"- Prompt Tokens: {len(output.prompt_token_ids)}, Response Tokens: {len(completion_output.token_ids)}")
             # compute mean median min max of input and outputs lens
             output_lens.append(len(completion_output.token_ids))
             responses += 1
         tpot += (output.metrics.finished_time - output.metrics.first_token_time) / total_tokens
     input_lens = np.array(input_lens)
     output_lens = np.array(output_lens)
-    
+
     avg_ttft = ttft / len(outputs)
     avg_tpot = tpot / len(outputs)
     avg_schedule_delay = schedule_delay / len(outputs)
-    print(f"Input length stats: mean={np.mean(input_lens):.2f}, median={np.median(input_lens):.2f}, min={np.min(input_lens)}, max={np.max(input_lens)}")
-    print(f"Output length stats: mean={np.mean(output_lens):.2f}, median={np.median(output_lens):.2f}, min={np.min(output_lens)}, max={np.max(output_lens)}")
+    print(
+        f"Input length stats: mean={np.mean(input_lens):.2f}, median={np.median(input_lens):.2f}, min={np.min(input_lens)}, max={np.max(input_lens)}")
+    print(
+        f"Output length stats: mean={np.mean(output_lens):.2f}, median={np.median(output_lens):.2f}, min={np.min(output_lens)}, max={np.max(output_lens)}")
     print(f"Average time to first token: {avg_ttft:.4f} seconds")
     print(f"Average time per output token: {avg_tpot:.4f} seconds")
     print(f"Average schedule delay: {avg_schedule_delay:.4f} seconds")
     print(f"End-to-end time: {e2e_time:.4f} seconds")
     print("=============================")
     print(f"Requests,MaxSeqs,SchedulerSteps,MaxTokens,BlockSize,TTFT,TTPOT,Schedule_Delay,E2E_Time")
-    print(f"{len(prompts)},{args.max_num_seqs},{args.num_scheduler_steps},{args.max_tokens},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
+    print(
+        f"{len(prompts)},{args.max_num_seqs},{args.num_scheduler_steps},{args.max_tokens},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
     print("=============================")
 
     if profile:
@@ -112,6 +117,23 @@ def generate_responses(args, sampling_params, prompts, profile=False):
         llm.stop_profile()
 
     return outputs
+
+
+async def set_partitions(engine: AsyncLLMEngine, pp_partition_ratio: Optional[str] = None):
+    if pp_partition_ratio is None:
+        return
+
+    pp_partitions = [float(layer) for layer in pp_partition_ratio.split(",")]
+    model_config = await engine.get_model_config()
+    total_num_hidden_layers = getattr(model_config.hf_text_config,
+                                      "num_hidden_layers", 0)
+
+    os.environ["VLLM_PP_LAYER_PARTITION"] = ",".join(
+        str(int(total_num_hidden_layers * partition))
+        for partition in pp_partitions
+    )
+
+    print(f"Set partitions: {os.environ['VLLM_PP_LAYER_PARTITION']}")
 
 
 async def get_async_llm_engine(args, sampling_params, prompts, profile=False):
@@ -129,6 +151,7 @@ async def get_async_llm_engine(args, sampling_params, prompts, profile=False):
         dtype=torch.float16
     )
     engine = AsyncLLMEngine.from_engine_args(engine_args)
+    await set_partitions(engine, args.pp_partition_ratio)
     requests = [{"prompt": prompt, "stream": False, "request_id": i + 1} for i, prompt in enumerate(prompts)]
 
     if profile:
@@ -156,7 +179,8 @@ async def get_async_llm_engine(args, sampling_params, prompts, profile=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="meta-llama/Llama-3.1-8B", help="meta-llama/Llama-3.1-8B, TinyLlama/TinyLlama_v1.1")
+    parser.add_argument("--model_name", type=str, default="meta-llama/Llama-3.1-8B",
+                        help="meta-llama/Llama-3.1-8B, TinyLlama/TinyLlama_v1.1")
     parser.add_argument("--tensor_parallel_size", type=int, default=1)
     parser.add_argument("--max_num_seqs", type=int, default=256)
     parser.add_argument("--num_prompts", type=int, default=16)
@@ -169,6 +193,7 @@ if __name__ == "__main__":
     parser.add_argument("--pipeline_parallel_size", type=int, default=1)
     parser.add_argument("--max_prompt_len", type=int, default=MAX_PROMPT_LEN)
     parser.add_argument("--distributed_executor_backend", type=str, default=None)
+    parser.add_argument("--pp_partition_ratio", type=str, default=None)
     args = parser.parse_args()
     print(f" *** Args: {args}")
     run_async = False
