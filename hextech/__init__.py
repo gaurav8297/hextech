@@ -129,6 +129,9 @@ async def set_partitions(args):
     total_num_hidden_layers = getattr(hf_text_config, "num_hidden_layers", 0)
     print(f"Total number of hidden layers: {total_num_hidden_layers}")
 
+    scaled_partitions = [int(round(total_num_hidden_layers * partition)) for partition in pp_partitions]
+    scaled_partitions[-1] = total_num_hidden_layers - sum(scaled_partitions[:-1])
+
     os.environ["VLLM_PP_LAYER_PARTITION"] = ",".join(
         str(int(total_num_hidden_layers * partition))
         for partition in pp_partitions
