@@ -1,3 +1,5 @@
 vllm==0.6.3.post1
 matplotlib==3.9.2
 datasets==3.1.0
+ray==2.35.0
+ray[adag]
