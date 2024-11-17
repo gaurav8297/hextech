@@ -10,6 +10,7 @@ import numpy as np
 from typing import Optional
 from datasets import load_dataset
 from vllm import LLM, AsyncLLMEngine, SamplingParams, AsyncEngineArgs
+from vllm.transformers_utils.config import get_config, get_hf_text_config
 
 # vllm settings
 os.environ["VLLM_TORCH_PROFILER_DIR"] = "./vllm_profile"
@@ -119,14 +120,14 @@ def generate_responses(args, sampling_params, prompts, profile=False):
     return outputs
 
 
-async def set_partitions(engine: AsyncLLMEngine, pp_partition_ratio: Optional[str] = None):
-    if pp_partition_ratio is None:
+async def set_partitions(args):
+    if args.pp_partition_ratio is None:
         return
 
-    pp_partitions = [float(layer) for layer in pp_partition_ratio.split(",")]
-    model_config = await engine.get_model_config()
-    total_num_hidden_layers = getattr(model_config.hf_text_config,
-                                      "num_hidden_layers", 0)
+    pp_partitions = [float(layer) for layer in args.pp_partition_ratio.split(",")]
+    hf_text_config = get_hf_text_config(get_config(args.model_name, True))
+    total_num_hidden_layers = getattr(hf_text_config, "num_hidden_layers", 0)
+    print(f"Total number of hidden layers: {total_num_hidden_layers}")
 
     os.environ["VLLM_PP_LAYER_PARTITION"] = ",".join(
         str(int(total_num_hidden_layers * partition))
@@ -150,8 +151,8 @@ async def get_async_llm_engine(args, sampling_params, prompts, profile=False):
         distributed_executor_backend=args.distributed_executor_backend,
         dtype=torch.float16
     )
+    await set_partitions(args)
     engine = AsyncLLMEngine.from_engine_args(engine_args)
-    await set_partitions(engine, args.pp_partition_ratio)
     requests = [{"prompt": prompt, "stream": False, "request_id": i + 1} for i, prompt in enumerate(prompts)]
 
     if profile:
