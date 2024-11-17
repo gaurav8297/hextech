@@ -132,10 +132,7 @@ async def set_partitions(args):
     scaled_partitions = [int(round(total_num_hidden_layers * partition)) for partition in pp_partitions]
     scaled_partitions[-1] = total_num_hidden_layers - sum(scaled_partitions[:-1])
 
-    os.environ["VLLM_PP_LAYER_PARTITION"] = ",".join(
-        str(int(total_num_hidden_layers * partition))
-        for partition in pp_partitions
-    )
+    os.environ["VLLM_PP_LAYER_PARTITION"] = ",".join([str(partition) for partition in scaled_partitions])
 
     print(f"Set partitions: {os.environ['VLLM_PP_LAYER_PARTITION']}")
 
