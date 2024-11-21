@@ -8,7 +8,6 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 
-from typing import Optional
 from datasets import load_dataset
 from multiprocessing import Process, Queue
 from vllm import LLM, AsyncLLMEngine, SamplingParams, AsyncEngineArgs
@@ -57,11 +56,14 @@ def generate_responses(args, sampling_params, prompts, profile=False):
         model=args.model_name,
         tensor_parallel_size=args.tensor_parallel_size,
         enable_chunked_prefill=args.enable_chunked_prefill,
+        max_num_batched_tokens=args.max_num_batched_tokens,
         max_num_seqs=args.max_num_seqs,
         num_scheduler_steps=args.num_scheduler_steps,
         multi_step_stream_outputs=args.multi_step_stream_outputs,
         block_size=args.block_size,
-        pipeline_parallel_size=args.pipeline_parallel_size
+        pipeline_parallel_size=args.pipeline_parallel_size,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        dtype=args.dtype
     )
 
     if profile:
@@ -105,13 +107,15 @@ async def get_async_llm_engine(args, sampling_params, prompts, profile=False):
         model=args.model_name,
         tensor_parallel_size=args.tensor_parallel_size,
         enable_chunked_prefill=args.enable_chunked_prefill,
+        max_num_batched_tokens=args.max_num_batched_tokens,
         max_num_seqs=args.max_num_seqs,
         num_scheduler_steps=args.num_scheduler_steps,
         multi_step_stream_outputs=args.multi_step_stream_outputs,
         block_size=args.block_size,
         pipeline_parallel_size=args.pipeline_parallel_size,
+        gpu_memory_utilization=args.gpu_memory_utilization,
         distributed_executor_backend=args.distributed_executor_backend,
-        dtype=torch.float16
+        dtype=args.dtype
     )
     await set_partitions(args)
     engine = AsyncLLMEngine.from_engine_args(engine_args)
@@ -186,9 +190,9 @@ def print_metrics(args, outputs):
     print(f"End-to-end time: {e2e_time:.4f} seconds")
     print(f"Throughput: {throughput:.4f} requests/second")
     print("=============================")
-    print(f"Requests,MaxSeqs,SchedulerSteps,MaxTokens,BlockSize,TTFT,TTPOT,Schedule_Delay,E2E_Time")
+    print(f"Requests,MaxSeqs,SchedulerSteps,MaxTokens,ChunkedPrefill,GPUUtil,BlockSize,TTFT,TTPOT,Schedule_Delay,E2E_Time")
     print(
-        f"{len(prompts)},{args.max_num_seqs},{args.num_scheduler_steps},{args.max_tokens},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
+        f"{len(prompts)},{args.max_num_seqs},{args.num_scheduler_steps},{args.max_tokens},{args.enable_chunked_prefill},{args.gpu_memory_utilization},{args.block_size},{avg_ttft:.4f},{avg_tpot:.4f},{avg_schedule_delay:.4f},{e2e_time:.4f}")
     print("=============================")
 
 def vllm_instance(worker_id, args, prompts, output_queue):
@@ -219,13 +223,16 @@ if __name__ == "__main__":
     parser.add_argument("--num_prompts", type=int, default=16)
     parser.add_argument("--max_tokens", type=int, default=1024)
     parser.add_argument("--enable_chunked_prefill", action="store_true")
+    parser.add_argument("--max_num_batched_tokens", type=int, default=None)
     parser.add_argument("--num_scheduler_steps", type=int, default=1)
     parser.add_argument("--multi_step_stream_outputs", action="store_true")
     parser.add_argument("--profile", action="store_true")
     parser.add_argument("--block_size", type=int, default=32)
+    parser.add_argument("--gpu_memory_utilization", type=float, default=0.9)
     parser.add_argument("--pipeline_parallel_size", type=int, default=1)
     parser.add_argument("--max_prompt_len", type=int, default=MAX_PROMPT_LEN)
     parser.add_argument("--distributed_executor_backend", type=str, default=None)
+    parser.add_argument("--dtype", type=str, default="auto")
     parser.add_argument("--pp_partition_ratio", type=str, default=None)
     parser.add_argument("--print_outputs", action="store_true")
     args = parser.parse_args()
